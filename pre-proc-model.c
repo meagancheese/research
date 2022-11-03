@@ -216,12 +216,13 @@ int peds_dat_to_arrays(int fd){
         line[0] = '\0';
         //fscanf(fp, "%[^\n]%*c", line);
         fgets(line, 100, fp);
-        sscanf(line, "%d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d%", &sample_num, &peds[0], &peds[1], &peds[2], &peds[3], &peds[4], &peds[5], &peds[6], &peds[7], &peds[8], &peds[9], &peds[10], &peds[11], &peds[12], &peds[13], &peds[14], &peds[15]);
+        sscanf(line, "%d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d", &sample_num, &peds[0], &peds[1], &peds[2], &peds[3], &peds[4], &peds[5], &peds[6], &peds[7], &peds[8], &peds[9], &peds[10], &peds[11], &peds[12], &peds[13], &peds[14], &peds[15]);
         for(int j = 0; j < NUM_CHANNELS; j++) {
             peds_b[i][j] = peds[j];
         }
     }
     fclose(fp);
+    return 0;
 }
 
 int ped_subtract() {
@@ -238,7 +239,7 @@ int ped_subtract() {
     return 0;
 }
 
-int integral(int rel_start, int rel_end) {
+int32_t * integral(int rel_start, int rel_end) {
     int start = data_packet.trigger_number + rel_start;
     if (start < 0) {
         start = start + NUM_SAMPLES;
@@ -267,6 +268,7 @@ int integral(int rel_start, int rel_end) {
             }
         }
     }
+    return integral;
 }
 
 
