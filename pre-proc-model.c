@@ -36,8 +36,10 @@ struct SW_Data_Packet {
 
 struct SW_Data_Packet data_packet;
 
-uint16_t peds_a[NUM_SAMPLES][NUM_CHANNELS];
-uint16_t peds_b[NUM_SAMPLES][NUM_CHANNELS];
+uint16_t peds_a[NUM_SAMPLES][NUM_CHANNELS]; // Really 12 bits
+uint16_t peds_b[NUM_SAMPLES][NUM_CHANNELS]; // Really 12 bits
+
+int16_t ped_sub_results[NUM_SAMPLES][NUM_CHANNELS]; // Really 13 bits
 
 
 void add_to_json(int json_fd, char * field, uint32_t value, uint8_t is_first, uint8_t is_last){
@@ -174,7 +176,6 @@ int peds_dat_to_arrays(int fd){
     char line[100];
     for(int i = 0; i < NUM_SAMPLES; i++) {
         line[0] = '\0';
-        //fscanf(fp, "%[^\n]%*c", line);
         printf("BEFORE FGETS\n");
         fflush(stdout);
         printf("LINE before fgets: %s\n", line);
@@ -222,6 +223,52 @@ int peds_dat_to_arrays(int fd){
     }
     fclose(fp);
 }
+
+int ped_subtract() {
+    for (int i = 0; i < NUM_SAMPLES; i++) {
+        for (int j = 0; j < NUM_CHANNELS; j++) {
+            if (data_packet.bank == 0) {
+                ped_sub_results[i][j] = data_packet.samples[i][j] - peds_a[i][j];
+            }
+            else {
+                ped_sub_results[i][j] = data_packet.samples[i][j] - peds_b[i][j];
+            }
+        }
+    }
+    return 0;
+}
+
+int integral(int rel_start, int rel_end) {
+    int start = data_packet.trigger_number + rel_start;
+    if (start < 0) {
+        start = start + NUM_SAMPLES;
+    }
+    int end = data_packet.trigger_number + rel_end;
+    if (end >= NUM_SAMPLES) {
+        end = end - NUM_SAMPLES;
+    }
+    int32_t integral[NUM_CHANNELS];
+    if (end >= start) {
+        for (int i = 0; i < NUM_CHANNELS; i++) {
+            integral[i] = 0;
+            for (int j = start; j <= end; j++) {
+                integral[i] = integral[i] + ped_sub_results[j][i];
+            }
+        }
+    }
+    else {
+        for (int i = 0; i < NUM_CHANNELS; i++) {
+            integral[i] = 0;
+            for (int j = start; j < NUM_SAMPLES; j++) {
+                integral[i] = integral[i] + ped_sub_results[j][i];
+            }
+            for (int k = 0; k <= end; k ++) {
+                integral[i] = integral[i] + ped_sub_results[k][i];
+            }
+        }
+    }
+}
+
 
 // Functions to make: ped_subtract, integrals, centroiding?, info mapping
 
