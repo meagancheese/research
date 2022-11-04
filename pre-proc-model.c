@@ -10,7 +10,6 @@
 #define NUM_CHANNELS 16
 #define NUM_SAMPLES 256 // N
 #define BUF_SIZE 4105 // 8 + N*16 + 1 words (16 bits / 2 bytes per word)
-#define JSON_BUF_SIZE 10000 // Arbitrary for now, will make closer to what's needed later.
 
 /*
  Mimics incoming data packet in C types.
@@ -40,6 +39,7 @@ uint16_t peds_a[NUM_SAMPLES][NUM_CHANNELS]; // Really 12 bits
 uint16_t peds_b[NUM_SAMPLES][NUM_CHANNELS]; // Really 12 bits
 
 int16_t ped_sub_results[NUM_SAMPLES][NUM_CHANNELS]; // Really 13 bits
+int32_t integrals[4][NUM_CHANNELS]; // Really 21 bits
 
 
 void add_to_json(int json_fd, char * field, uint32_t value, uint8_t is_first, uint8_t is_last){
@@ -91,6 +91,7 @@ int struct_to_json(int json_fd){
     add_to_json(json_fd, "state_machine_status", data_packet.state_machine_status, 0, 0);
     add_samples_to_json(json_fd);
     add_to_json(json_fd, "omega", data_packet.omega, 0, 1);
+    return 0;
 }
 
 int data_packet_dat_to_struct(int fd){
@@ -168,55 +169,26 @@ int peds_dat_to_arrays(int fd){
     if(fp == NULL) {
         perror("fdopen");
     }
-    printf("After fdopen\n");
-    fflush(stdout);
 
     uint16_t sample_num;
     uint16_t peds[NUM_CHANNELS];
     char line[100];
     for(int i = 0; i < NUM_SAMPLES; i++) {
         line[0] = '\0';
-        printf("BEFORE FGETS\n");
-        fflush(stdout);
-        printf("LINE before fgets: %s\n", line);
         if(fgets(line, sizeof(line), fp) == NULL) {
             perror("fgets");
         }
-        printf("LINE after fgets: %s", line);
-        printf("After fgets\n");
-        fflush(stdout);
-        sscanf(line, "%d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d", &sample_num, &peds[0], &peds[1], &peds[2], &peds[3], &peds[4], &peds[5], &peds[6], &peds[7], &peds[8], &peds[9], &peds[10], &peds[11], &peds[12], &peds[13], &peds[14], &peds[15]);
-        printf("After sscanf\n");
-        printf("Line after sscanf: %s", line);
-        fflush(stdout);
-        printf("Channel 1: %d\n", peds[0]);
-        printf("Channel 2: %d\n", peds[1]);
-        printf("Channel 3: %d\n", peds[2]);
-        printf("Channel 4: %d\n", peds[3]);
-        printf("Channel 5: %d\n", peds[4]);
-        printf("Channel 6: %d\n", peds[5]);
-        printf("Channel 7: %d\n", peds[6]);
-        printf("Channel 8: %d\n", peds[7]);
-        printf("Channel 9: %d\n", peds[8]);
-        printf("Channel 10: %d\n", peds[9]);
-        printf("Channel 11: %d\n", peds[10]);
-        printf("Channel 12: %d\n", peds[11]);
-        printf("Channel 13: %d\n", peds[12]);
-        printf("Channel 14: %d\n", peds[13]);
-        printf("Channel 15: %d\n", peds[14]);
-        printf("Channel 16: %d\n", peds[15]);
-        fflush(stdout);
+        sscanf(line, "%hu %hu %hu %hu %hu %hu %hu %hu %hu %hu %hu %hu %hu %hu %hu %hu %hu", &sample_num, &peds[0], &peds[1], &peds[2], &peds[3], &peds[4], &peds[5], &peds[6], &peds[7], &peds[8], &peds[9], &peds[10], &peds[11], &peds[12], &peds[13], &peds[14], &peds[15]);
         for(int j = 0; j < NUM_CHANNELS; j++) {
             peds_a[i][j] = peds[j];
         }
-        printf("After assignment\n");
-        fflush(stdout);
     }
     for(int i = 0; i < NUM_SAMPLES; i++) {
         line[0] = '\0';
-        //fscanf(fp, "%[^\n]%*c", line);
-        fgets(line, 100, fp);
-        sscanf(line, "%d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d %d", &sample_num, &peds[0], &peds[1], &peds[2], &peds[3], &peds[4], &peds[5], &peds[6], &peds[7], &peds[8], &peds[9], &peds[10], &peds[11], &peds[12], &peds[13], &peds[14], &peds[15]);
+        if(fgets(line, sizeof(line), fp) == NULL) {
+            perror("fgets");
+        }
+        sscanf(line, "%hu %hu %hu %hu %hu %hu %hu %hu %hu %hu %hu %hu %hu %hu %hu %hu %hu", &sample_num, &peds[0], &peds[1], &peds[2], &peds[3], &peds[4], &peds[5], &peds[6], &peds[7], &peds[8], &peds[9], &peds[10], &peds[11], &peds[12], &peds[13], &peds[14], &peds[15]);
         for(int j = 0; j < NUM_CHANNELS; j++) {
             peds_b[i][j] = peds[j];
         }
@@ -239,7 +211,7 @@ int ped_subtract() {
     return 0;
 }
 
-int32_t * integral(int rel_start, int rel_end) {
+int integral(int rel_start, int rel_end, int integral_num) {
     int start = data_packet.trigger_number + rel_start;
     if (start < 0) {
         start = start + NUM_SAMPLES;
@@ -248,62 +220,76 @@ int32_t * integral(int rel_start, int rel_end) {
     if (end >= NUM_SAMPLES) {
         end = end - NUM_SAMPLES;
     }
-    int32_t integral[NUM_CHANNELS];
+    int32_t integral;
     if (end >= start) {
         for (int i = 0; i < NUM_CHANNELS; i++) {
-            integral[i] = 0;
+            integral = 0;
             for (int j = start; j <= end; j++) {
-                integral[i] = integral[i] + ped_sub_results[j][i];
+                integral = integral + ped_sub_results[j][i];
             }
+            integrals[integral_num][i] = integral;
         }
     }
     else {
         for (int i = 0; i < NUM_CHANNELS; i++) {
-            integral[i] = 0;
+            integral = 0;
             for (int j = start; j < NUM_SAMPLES; j++) {
-                integral[i] = integral[i] + ped_sub_results[j][i];
+                integral = integral + ped_sub_results[j][i];
             }
             for (int k = 0; k <= end; k ++) {
-                integral[i] = integral[i] + ped_sub_results[k][i];
+                integral = integral + ped_sub_results[k][i];
             }
+            integrals[integral_num][i] = integral;
         }
     }
-    return integral;
+    return 0;
 }
 
 
-// Functions to make: ped_subtract, integrals, centroiding?, info mapping
-
 int main(int argc, char *argv[]){
     
-    //if (argc != 4) {
-        // Need to add the interval limits to the count above (unless they're optional)
-        // Should the Intervals be optional? Or else hard code a number of intervals?
-        // Also maybe an optional name for a JSON debug file...
-    //    printf("Usage: %s <EventStream.dat> <peds.dat> <trigger> <>\n", argv[0]);
-    //    return -1;
-    //}
+    if (argc != 11) {
+        printf("Usage: %s <data_file> <peds_file> <s1> <e1> <s2> <e2> <s3> <e3> <s4> <e4>\n", argv[0]);
+        printf("       The s# and e# fields represent trigger-relative integral start and end sample values.\n");
+        return -1;
+    }
     
-    int data_packet_fd = open("EventStream.dat", 0, "r");
+    int data_packet_fd = open(argv[1], 0, "r");
     if (data_packet_fd == -1) {
         perror("open");
     }
 
     data_packet_dat_to_struct(data_packet_fd);
 
-    int json_fd = open("output.json", O_CREAT | O_RDWR);
+    int json_fd = open("packet.json", O_CREAT | O_RDWR);
     if (json_fd == -1) {
         perror("open");
     }
 
     struct_to_json(json_fd);
 
-    int peds_fd = open("peds.dat", 0, "r");
+    int peds_fd = open(argv[2], 0, "r");
     if (peds_fd == -1) {
         perror("open");
     }
 
     peds_dat_to_arrays(peds_fd);
+
+    ped_subtract();
+
+    int s1 = atoi(argv[3]);
+    int e1 = atoi(argv[4]);
+    int s2 = atoi(argv[5]);
+    int e2 = atoi(argv[6]);
+    int s3 = atoi(argv[7]);
+    int e3 = atoi(argv[8]);
+    int s4 = atoi(argv[9]);
+    int e4 = atoi(argv[10]);
+
+    integral(s1, e1, 0);
+    integral(s2, e2, 1);
+    integral(s3, e3, 2);
+    integral(s4, e4, 3);
 
     return 0;
 }
