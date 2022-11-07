@@ -245,6 +245,49 @@ int integral(int rel_start, int rel_end, int integral_num) {
     return 0;
 }
 
+int write_header(int fd, char * field, uint32_t value) {
+    char value_ptr[10];
+    write(fd, field, strlen(field));
+    write(fd, ": ", 2);
+    sprintf(value_ptr, "%d", value);
+    write(fd, value_ptr, strlen(value_ptr));
+    write(fd, "\n", 1);
+    return 0;
+}
+
+int write_integrals(int fd) {
+    char value_ptr[10];
+    for (int i = 0; i < 4; i++) {
+        sprintf(value_ptr, "%d", i);
+        write(fd, value_ptr, strlen(value_ptr));
+        write(fd, "   ", 3);
+        for (int j = 0; j < NUM_CHANNELS; j++) {
+            sprintf(value_ptr, "%d", integrals[i][j]);
+            write(fd, " ", 1);
+            write(fd, value_ptr, strlen(value_ptr));
+        }
+        write(fd, "\n", 1);
+    }
+    return 0;
+}
+
+int write_output(int fd) {
+    write_header(fd, "i2c_address", data_packet.i2c_address);
+    write_header(fd, "conf_address", data_packet.conf_address);
+    write_header(fd, "bank", data_packet.bank);
+    write_header(fd, "fine_time", data_packet.fine_time);
+    write_header(fd, "coarse_time", data_packet.coarse_time);
+    write_header(fd, "trigger_number", data_packet.trigger_number);
+    write_header(fd, "samples_after_trigger", data_packet.samples_after_trigger);
+    write_header(fd, "look_back_samples", data_packet.look_back_samples);
+    write_header(fd, "samples_to_be_read", data_packet.samples_to_be_read);
+    write_header(fd, "starting_sample_number", data_packet.starting_sample_number);
+    write_header(fd, "number_of_missed_triggers", data_packet.number_of_missed_triggers);
+    write_header(fd, "state_machine_status", data_packet.state_machine_status);
+    write_integrals(fd);
+    return 0;
+}
+
 
 int main(int argc, char *argv[]){
     
@@ -261,7 +304,7 @@ int main(int argc, char *argv[]){
 
     data_packet_dat_to_struct(data_packet_fd);
 
-    int json_fd = open("packet.json", O_CREAT | O_RDWR);
+    int json_fd = open("packet.json", O_CREAT | O_RDWR, 0666);
     if (json_fd == -1) {
         perror("open");
     }
@@ -290,6 +333,13 @@ int main(int argc, char *argv[]){
     integral(s2, e2, 1);
     integral(s3, e3, 2);
     integral(s4, e4, 3);
+
+    int output_fd = open("output.txt", O_CREAT | O_RDWR, 0666);
+    if (output_fd == -1) {
+        perror("open");
+    }
+
+    write_output(output_fd);
 
     return 0;
 }
