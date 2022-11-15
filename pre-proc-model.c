@@ -35,8 +35,9 @@ struct SW_Data_Packet {
 
 struct SW_Data_Packet data_packet;
 
-uint16_t peds_a[NUM_SAMPLES][NUM_CHANNELS]; // Really 12 bits
-uint16_t peds_b[NUM_SAMPLES][NUM_CHANNELS]; // Really 12 bits
+//uint16_t peds_a[NUM_SAMPLES][NUM_CHANNELS]; // Really 12 bits
+//uint16_t peds_b[NUM_SAMPLES][NUM_CHANNELS]; // Really 12 bits
+uint16_t all_peds[2][NUM_SAMPLES][NUM_CHANNELS]; // Really 12 bits
 
 int16_t ped_sub_results[NUM_SAMPLES][NUM_CHANNELS]; // Really 13 bits
 int32_t integrals[4][NUM_CHANNELS]; // Really 21 bits
@@ -142,15 +143,10 @@ int data_packet_dat_to_struct(int fd){
     data_packet.state_machine_status = buf[7] & 0xff;
 
     int buf_idx = 8;
-    int samples_idx = data_packet.starting_sample_number;
     for (int i = 0; i < data_packet.samples_to_be_read + 1; i++) {
         for (int j = 0; j < NUM_CHANNELS; j++) {
-            data_packet.samples[samples_idx][j] = buf[buf_idx] & 0xfff;
+            data_packet.samples[i][j] = buf[buf_idx] & 0xfff;
             buf_idx++;
-        }
-        samples_idx++;
-        if (samples_idx == NUM_SAMPLES) {
-            samples_idx = 0;
         }
     }
 
@@ -180,7 +176,7 @@ int peds_dat_to_arrays(int fd){
         }
         sscanf(line, "%hu %hu %hu %hu %hu %hu %hu %hu %hu %hu %hu %hu %hu %hu %hu %hu %hu", &sample_num, &peds[0], &peds[1], &peds[2], &peds[3], &peds[4], &peds[5], &peds[6], &peds[7], &peds[8], &peds[9], &peds[10], &peds[11], &peds[12], &peds[13], &peds[14], &peds[15]);
         for(int j = 0; j < NUM_CHANNELS; j++) {
-            peds_a[i][j] = peds[j];
+            all_peds[0][i][j] = peds[j];
         }
     }
     for(int i = 0; i < NUM_SAMPLES; i++) {
@@ -190,7 +186,7 @@ int peds_dat_to_arrays(int fd){
         }
         sscanf(line, "%hu %hu %hu %hu %hu %hu %hu %hu %hu %hu %hu %hu %hu %hu %hu %hu %hu", &sample_num, &peds[0], &peds[1], &peds[2], &peds[3], &peds[4], &peds[5], &peds[6], &peds[7], &peds[8], &peds[9], &peds[10], &peds[11], &peds[12], &peds[13], &peds[14], &peds[15]);
         for(int j = 0; j < NUM_CHANNELS; j++) {
-            peds_b[i][j] = peds[j];
+            all_peds[1][i][j] = peds[j];
         }
     }
     fclose(fp);
@@ -198,27 +194,27 @@ int peds_dat_to_arrays(int fd){
 }
 
 int ped_subtract() {
-    for (int i = 0; i < NUM_SAMPLES; i++) {
+    int ped_sample_idx = data_packet.starting_sample_number;
+    for (int i = 0; i < data_packet.samples_to_be_read + 1; i++) {
         for (int j = 0; j < NUM_CHANNELS; j++) {
-            if (data_packet.bank == 0) {
-                ped_sub_results[i][j] = data_packet.samples[i][j] - peds_a[i][j];
-            }
-            else {
-                ped_sub_results[i][j] = data_packet.samples[i][j] - peds_b[i][j];
-            }
+            ped_sub_results[i][j] = data_packet.samples[i][j] - all_peds[data_packet.bank][ped_sample_idx][j];
+        }
+        ped_sample_idx += 1;
+        if (ped_sample_idx == NUM_SAMPLES) {
+            ped_sample_idx = 0;
         }
     }
     return 0;
 }
 
 int integral(int rel_start, int rel_end, int integral_num) {
-    int start = data_packet.trigger_number + rel_start;
+    int start = data_packet.trigger_number + rel_start - data_packet.starting_sample_number;
     if (start < 0) {
-        start = start + NUM_SAMPLES;
+        start = start + data_packet.samples_to_be_read;
     }
-    int end = data_packet.trigger_number + rel_end;
-    if (end >= NUM_SAMPLES) {
-        end = end - NUM_SAMPLES;
+    int end = data_packet.trigger_number + rel_end - data_packet.starting_sample_number;
+    if (end >= data_packet.samples_to_be_read) {
+        end = end - data_packet.samples_to_be_read;
     }
     int32_t integral;
     if (end >= start) {
@@ -255,10 +251,10 @@ int write_header(int fd, char * field, uint32_t value) {
     return 0;
 }
 
-int write_integrals(int fd) {
+int write_integrals(int fd, char ** bounds) {
     char value_ptr[10];
     for (int i = 0; i < 4; i++) {
-        sprintf(value_ptr, "%d", i);
+        sprintf(value_ptr, "%d (%s,%s)", i, bounds[i*2], bounds[i*2+1]);
         write(fd, value_ptr, strlen(value_ptr));
         write(fd, "   ", 3);
         for (int j = 0; j < NUM_CHANNELS; j++) {
@@ -271,7 +267,7 @@ int write_integrals(int fd) {
     return 0;
 }
 
-int write_output(int fd) {
+int write_output(int fd, char ** bounds) {
     write_header(fd, "i2c_address", data_packet.i2c_address);
     write_header(fd, "conf_address", data_packet.conf_address);
     write_header(fd, "bank", data_packet.bank);
@@ -284,7 +280,7 @@ int write_output(int fd) {
     write_header(fd, "starting_sample_number", data_packet.starting_sample_number);
     write_header(fd, "number_of_missed_triggers", data_packet.number_of_missed_triggers);
     write_header(fd, "state_machine_status", data_packet.state_machine_status);
-    write_integrals(fd);
+    write_integrals(fd, bounds);
     return 0;
 }
 
@@ -334,12 +330,14 @@ int main(int argc, char *argv[]){
     integral(s3, e3, 2);
     integral(s4, e4, 3);
 
+    char * bounds[] = {argv[3], argv[4], argv[5], argv[6], argv[7], argv[8], argv[9], argv[10]};
+
     int output_fd = open("output.txt", O_CREAT | O_RDWR, 0666);
     if (output_fd == -1) {
         perror("open");
     }
 
-    write_output(output_fd);
+    write_output(output_fd, bounds);
 
     return 0;
 }
