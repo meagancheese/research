@@ -297,7 +297,7 @@ int main(int argc, char *argv[]){
     if (data_packet_fd == -1) {
         perror("open");
     }
-
+    
     data_packet_dat_to_struct(data_packet_fd);
 
     int json_fd = open("packet.json", O_CREAT | O_RDWR, 0666);
