@@ -34,14 +34,11 @@ struct SW_Data_Packet {
 };
 
 int16_t ped_sub_results[NUM_SAMPLES][NUM_CHANNELS] = {0}; // Really 13 bits
-int32_t integrals[4][NUM_CHANNELS] = {0}; // Really 21 bits
+//int32_t integrals[4][NUM_CHANNELS] = {0}; // Really 21 bits
 
+// FOR DEBUGGING
+char value_ptr[10];
 
-extern "C" {
-    int ped_subtract(struct SW_Data_Packet * data_packet);
-    int integral(struct SW_Data_Packet * data_packet, int rel_start, int rel_end, int integral_num);
-    void preprocess(struct SW_Data_Packet *input_data_packet, uint16_t *input_all_peds, char ** bounds, int32_t *output_integrals);
-}
 
 int ped_subtract(struct SW_Data_Packet * data_packet, uint16_t *all_peds) {
     int ped_sample_idx = data_packet->starting_sample_number;
@@ -55,10 +52,14 @@ int ped_subtract(struct SW_Data_Packet * data_packet, uint16_t *all_peds) {
             ped_sample_idx = 0;
         }
     }
+    printf("all_peds[1][3][5] from kernel: \n");
+    sprintf(value_ptr, "%d", *(((all_peds + (1)*(NUM_SAMPLES*NUM_CHANNELS)) + 3*NUM_CHANNELS) + 5));
+    printf(value_ptr);
+    printf("\n");
     return 0;
 }
 
-int integral(struct SW_Data_Packet * data_packet, int rel_start, int rel_end, int integral_num) {
+int integral(struct SW_Data_Packet * data_packet, int rel_start, int rel_end, int integral_num, int32_t * integrals) {
     int start = data_packet->trigger_number + rel_start - data_packet->starting_sample_number;
     if (start < 0) {
         start = start + data_packet->samples_to_be_read;
@@ -74,7 +75,7 @@ int integral(struct SW_Data_Packet * data_packet, int rel_start, int rel_end, in
             for (int j = start; j <= end; j++) {
                 integral = integral + ped_sub_results[j][i];
             }
-            integrals[integral_num][i] = integral;
+            integrals[integral_num*NUM_CHANNELS+i] = integral;
         }
     }
     else {
@@ -86,40 +87,106 @@ int integral(struct SW_Data_Packet * data_packet, int rel_start, int rel_end, in
             for (int k = 0; k <= end; k ++) {
                 integral = integral + ped_sub_results[k][i];
             }
-            integrals[integral_num][i] = integral;
+            integrals[integral_num*NUM_CHANNELS+i] = integral;
         }
     }
     return 0;
 }
 
+// THESE METHODS ARE STRICTLY FOR DEBUGGING
+void add_to_json(int json_fd, char * field, uint32_t value, uint8_t is_first, uint8_t is_last){
+    char value_ptr[10];
+    if (is_first) {
+        write(json_fd, "{ \"", 3);
+    }
+    write(json_fd, field, strlen(field));
+    write(json_fd, "\": ", 3);
+    sprintf(value_ptr, "%d", value);
+    write(json_fd, value_ptr, strlen(value_ptr));
+    if (!is_last) {
+        write(json_fd, ", \"", 3);
+    }
+    else {
+        write(json_fd, " }", 2);
+    }
+}
 
-void preprocess(
-	    struct SW_Data_Packet *input_data_packet, // Read-Only Data Packet Struct
-	    uint16_t *input_all_peds, // Read-Only Pedestals
-        char ** bounds, // Read-Only Integral Bounds
-	    int32_t *output_integrals       // Output Result (Integrals)
-	    )
-{
+void add_samples_to_json(int json_fd, struct SW_Data_Packet * data_packet){
+    char value_ptr[10];
+    write(json_fd, "samples", 7);
+    write(json_fd, "\": [ ", 5);
+
+    for (int i = 0; i < NUM_SAMPLES; i++) {
+        for (int j = 0; j < NUM_CHANNELS; j++) {
+            sprintf(value_ptr, "%d", data_packet->samples[i][j]);
+            write(json_fd, value_ptr, strlen(value_ptr));
+            write(json_fd, ", ", 2);
+        }
+    }
+    lseek(json_fd, -2, SEEK_CUR);
+    write(json_fd, " ], \"", 5);
+}
+
+int struct_to_json(int json_fd, struct SW_Data_Packet * data_packet){
+    add_to_json(json_fd, "alpha", data_packet->alpha, 1, 0);
+    add_to_json(json_fd, "i2c_address", data_packet->i2c_address, 0, 0);
+    add_to_json(json_fd, "conf_address", data_packet->conf_address, 0, 0);
+    add_to_json(json_fd, "bank", data_packet->bank, 0, 0);
+    add_to_json(json_fd, "fine_time", data_packet->fine_time, 0, 0);
+    add_to_json(json_fd, "coarse_time", data_packet->coarse_time, 0, 0);
+    add_to_json(json_fd, "trigger_number", data_packet->trigger_number, 0, 0);
+    add_to_json(json_fd, "samples_after_trigger", data_packet->samples_after_trigger, 0, 0);
+    add_to_json(json_fd, "look_back_samples", data_packet->look_back_samples, 0, 0);
+    add_to_json(json_fd, "samples_to_be_read", data_packet->samples_to_be_read, 0, 0);
+    add_to_json(json_fd, "starting_sample_number", data_packet->starting_sample_number, 0, 0);
+    add_to_json(json_fd, "number_of_missed_triggers", data_packet->number_of_missed_triggers, 0, 0);
+    add_to_json(json_fd, "state_machine_status", data_packet->state_machine_status, 0, 0);
+    add_samples_to_json(json_fd, data_packet);
+    add_to_json(json_fd, "omega", data_packet->omega, 0, 1);
+    return 0;
+}
+
+extern "C" {
+    void preprocess(
+	        struct SW_Data_Packet * input_data_packet, // Read-Only Data Packet Struct
+	        uint16_t *input_all_peds, // Read-Only Pedestals
+            int * bounds, // Read-Only Integral Bounds
+	        int32_t *output_integrals       // Output Result (Integrals)
+	        )
+    {
 #pragma HLS INTERFACE m_axi port=input_data_packet bundle=aximm1
 #pragma HLS INTERFACE m_axi port=input_all_peds bundle=aximm2
 #pragma HLS INTERFACE m_axi port=bounds bundle=aximm3
 #pragma HLS INTERFACE m_axi port=output_integrals bundle=aximm1
 
-	ped_subtract(input_data_packet, input_all_peds);
+        int json_fd = open("kernel_packet.json", O_CREAT | O_RDWR, 0666);
+        if (json_fd == -1) {
+            perror("open");
+        }
 
-    int s1 = atoi(bounds[0]);
-    int e1 = atoi(bounds[1]);
-    int s2 = atoi(bounds[2]);
-    int e2 = atoi(bounds[3]);
-    int s3 = atoi(bounds[4]);
-    int e3 = atoi(bounds[5]);
-    int s4 = atoi(bounds[6]);
-    int e4 = atoi(bounds[7]);
+        struct_to_json(json_fd, input_data_packet);
 
-    integral(input_data_packet, s1, e1, 0);
-    integral(input_data_packet, s2, e2, 1);
-    integral(input_data_packet, s3, e3, 2);
-    integral(input_data_packet, s4, e4, 3);
+	    ped_subtract(input_data_packet, input_all_peds);
 
-    output_integrals = &integrals[0][0];
+        integral(input_data_packet, bounds[0], bounds[1], 0, output_integrals);
+        integral(input_data_packet, bounds[2], bounds[3], 1, output_integrals);
+        integral(input_data_packet, bounds[4], bounds[5], 2, output_integrals);
+        integral(input_data_packet, bounds[6], bounds[7], 3, output_integrals);
+
+        printf("BOUNDS: \n");
+        sprintf(value_ptr, "%d", bounds[0]);
+        printf(value_ptr);
+        printf("\n");
+        sprintf(value_ptr, "%d", bounds[1]);
+        printf(value_ptr);
+        printf("\n");
+
+        for (int i = 0; i < 4; i++) {
+            for (int j = 0; j < NUM_CHANNELS; j++) {
+                sprintf(value_ptr, "%d", output_integrals[i*NUM_CHANNELS+j]);
+                printf(value_ptr);
+                printf("\n");
+            }
+        }
+    }
 }
