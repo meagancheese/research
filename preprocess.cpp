@@ -62,20 +62,17 @@ int integral(struct SW_Data_Packet * data_packet, int rel_start, int rel_end, in
     if (end >= NUM_SAMPLES - 1) {
         end = end - (NUM_SAMPLES - 1);
     }
+    int linear = 0;
+    if (end >= start) {
+        linear = 1;
+    }
     for (int i = 0; i < NUM_SAMPLES; i++) {
-        for (int j = 0; j < NUM_CHANNELS; j++) {
+        for (j = 0; j < NUM_CHANNELS; j++) {
             if (i == 0) {
                 integrals[integral_num*NUM_CHANNELS+j] = 0;
             }
-            if (end >= start) {
-                if ((i >= start) && (i <= end)) {
-                    integrals[integral_num*NUM_CHANNELS+j] += ped_sub_results[i][j];
-                }
-            }
-            else {
-                if ((i >= start) || (i <= end)) {
-                    integrals[integral_num*NUM_CHANNELS+j] += ped_sub_results[i][j];
-                }
+            if (((i >= start) && (i <= end)) || (!linear && ((i >= start) || (i <= end)))) {
+                integrals[integral_num*NUM_CHANNELS+j] += ped_sub_results[i][j];
             }
         }
     }
