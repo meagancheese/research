@@ -39,6 +39,7 @@ int16_t ped_sub_results[NUM_SAMPLES][NUM_CHANNELS] = {0}; // Really 13 bits
 int ped_subtract(struct SW_Data_Packet * data_packet, uint16_t *all_peds) {
     int ped_sample_idx = data_packet->starting_sample_number;
     for (int i = 0; i < data_packet->samples_to_be_read + 1; i++) {
+        #pragma HLS loop_tripcount min=1 max=N
         for (int j = 0; j < NUM_CHANNELS; j++) {
             ped_sub_results[i][j] = data_packet->samples[i][j] - all_peds[(data_packet->bank)*NUM_SAMPLES*NUM_CHANNELS + ped_sample_idx*NUM_CHANNELS + j];
         }
@@ -64,6 +65,7 @@ int integral(struct SW_Data_Packet * data_packet, int rel_start, int rel_end, in
         for (int i = 0; i < NUM_CHANNELS; i++) {
             integral = 0;
             for (int j = start; j <= end; j++) {
+                #pragma HLS loop_tripcount min=1 max=N
                 integral = integral + ped_sub_results[j][i];
             }
             integrals[integral_num*NUM_CHANNELS+i] = integral;
@@ -73,9 +75,11 @@ int integral(struct SW_Data_Packet * data_packet, int rel_start, int rel_end, in
         for (int i = 0; i < NUM_CHANNELS; i++) {
             integral = 0;
             for (int j = start; j < NUM_SAMPLES; j++) {
+                #pragma HLS loop_tripcount min=1 max=N
                 integral = integral + ped_sub_results[j][i];
             }
             for (int k = 0; k <= end; k ++) {
+                #pragma HLS loop_tripcount min=1 max=N
                 integral = integral + ped_sub_results[k][i];
             }
             integrals[integral_num*NUM_CHANNELS+i] = integral;
