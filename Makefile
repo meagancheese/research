@@ -7,10 +7,10 @@ app.exe: ../../src/host.cpp
 		-L${XILINX_XRT}/lib/ -lOpenCL -pthread -lrt -lstdc++
 	
 preprocess.xo: ../../src/preprocess.cpp
-	v++ -c -t ${TARGET} --config ../../src/u280.cfg -k preprocess -I../../src ../../src/preprocess.cpp -o preprocess.xo 
+	v++ --hls.jobs 4 -c -t ${TARGET} --config ../../src/u280.cfg -k preprocess -I../../src ../../src/preprocess.cpp -o preprocess.xo 
 
-preprocess.xclbin: ./preprocess.xo
-	v++ -l -t ${TARGET} --config ../../src/u280.cfg ./preprocess.xo -o preprocess.xclbin
+#preprocess.xclbin: ./preprocess.xo
+#	v++ --hls.jobs 4 -l -t ${TARGET} --config ../../src/u280.cfg ./preprocess.xo -o preprocess.xclbin
 
 emconfig.json:
 	emconfigutil --platform xilinx_u280_xdma_201920_3 --nd 1
