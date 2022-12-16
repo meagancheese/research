@@ -56,35 +56,27 @@ int ped_subtract(struct SW_Data_Packet * data_packet, uint16_t *all_peds) {
 int integral(struct SW_Data_Packet * data_packet, int rel_start, int rel_end, int integral_num, int32_t * integrals) {
     int start = data_packet->trigger_number + rel_start - data_packet->starting_sample_number;
     if (start < 0) {
-        start = start + data_packet->samples_to_be_read;
+        start = start + NUM_SAMPLES - 1;
     }
     int end = data_packet->trigger_number + rel_end - data_packet->starting_sample_number;
-    if (end >= data_packet->samples_to_be_read) {
-        end = end - data_packet->samples_to_be_read;
+    if (end >= NUM_SAMPLES - 1) {
+        end = end - (NUM_SAMPLES - 1);
     }
-    int32_t integral;
-    if (end >= start) {
-        for (int i = 0; i < NUM_CHANNELS; i++) {
-            integral = 0;
-            for (int j = start; j <= end; j++) {
-                #pragma HLS loop_tripcount min=1 max=256
-                integral = integral + ped_sub_results[j][i];
+    for (int i = 0; i < NUM_SAMPLES; i++) {
+        for (int j = 0; j < NUM_CHANNELS; j++) {
+            if (i == 0) {
+                integrals[integral_num*NUM_CHANNELS+j] = 0;
             }
-            integrals[integral_num*NUM_CHANNELS+i] = integral;
-        }
-    }
-    else {
-        for (int i = 0; i < NUM_CHANNELS; i++) {
-            integral = 0;
-            for (int j = start; j < NUM_SAMPLES; j++) {
-                #pragma HLS loop_tripcount min=1 max=256
-                integral = integral + ped_sub_results[j][i];
+            if (end >= start) {
+                if ((i >= start) && (i <= end)) {
+                    integrals[integral_num*NUM_CHANNELS+j] += ped_sub_results[i][j];
+                }
             }
-            for (int k = 0; k <= end; k ++) {
-                #pragma HLS loop_tripcount min=1 max=256
-                integral = integral + ped_sub_results[k][i];
+            else {
+                if ((i >= start) || (i <= end)) {
+                    integrals[integral_num*NUM_CHANNELS+j] += ped_sub_results[i][j];
+                }
             }
-            integrals[integral_num*NUM_CHANNELS+i] = integral;
         }
     }
     return 0;
