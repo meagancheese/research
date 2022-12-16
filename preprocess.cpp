@@ -44,10 +44,12 @@ int ped_subtract(struct SW_Data_Packet * data_packet, uint16_t *all_peds) {
         #pragma HLS loop_tripcount min=1 max=256
         for (int j = 0; j < NUM_CHANNELS; j++) {
             ped_sub_results[i][j] = data_packet->samples[i][j] - all_peds[bank*NUM_SAMPLES*NUM_CHANNELS + ped_sample_idx*NUM_CHANNELS + j];
-        }
-        ped_sample_idx += 1;
-        if (ped_sample_idx == NUM_SAMPLES) {
-            ped_sample_idx = 0;
+            if (j==NUM_CHANNELS-1) {
+                ped_sample_idx += 1;
+                if (ped_sample_idx == NUM_SAMPLES) {
+                    ped_sample_idx = 0;
+                }
+            }
         }
     }
     return 0;
