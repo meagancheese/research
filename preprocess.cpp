@@ -38,10 +38,12 @@ int16_t ped_sub_results[NUM_SAMPLES][NUM_CHANNELS] = {0}; // Really 13 bits
 
 int ped_subtract(struct SW_Data_Packet * data_packet, uint16_t *all_peds) {
     int ped_sample_idx = data_packet->starting_sample_number;
-    for (int i = 0; i < data_packet->samples_to_be_read + 1; i++) {
+    uint8_t samples_to_be_read = data_packet->samples_to_be_read;
+    uint8_t bank = data_packet->bank;
+    for (int i = 0; i < samples_to_be_read + 1; i++) {
         #pragma HLS loop_tripcount min=1 max=256
         for (int j = 0; j < NUM_CHANNELS; j++) {
-            ped_sub_results[i][j] = data_packet->samples[i][j] - all_peds[(data_packet->bank)*NUM_SAMPLES*NUM_CHANNELS + ped_sample_idx*NUM_CHANNELS + j];
+            ped_sub_results[i][j] = data_packet->samples[i][j] - all_peds[bank*NUM_SAMPLES*NUM_CHANNELS + ped_sample_idx*NUM_CHANNELS + j];
         }
         ped_sample_idx += 1;
         if (ped_sample_idx == NUM_SAMPLES) {
