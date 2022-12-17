@@ -68,12 +68,9 @@ int integral(struct SW_Data_Packet * data_packet, int rel_start, int rel_end, in
     }
     for (int i = 0; i < NUM_SAMPLES; i++) {
         for (int j = 0; j < NUM_CHANNELS; j++) {
-            if (i == 0) {
-                integrals[integral_num*NUM_CHANNELS+j] = 0;
-            }
-            if (((i >= start) && (i <= end)) || (!linear && ((i >= start) || (i <= end)))) {
-                integrals[integral_num*NUM_CHANNELS+j] += ped_sub_results[i][j];
-            }
+            int32_t current_integral = integrals[integral_num*NUM_CHANNELS+j];
+            integrals[integral_num*NUM_CHANNELS+j] = (i == 0) ? 0 : current_integral;
+            integrals[integral_num*NUM_CHANNELS+j] = ((i >= start) && (i <= end)) || (!linear && ((i >= start) || (i <= end))) ? current_integral + ped_sub_results[i][j] : current_integral;
         }
     }
     return 0;
