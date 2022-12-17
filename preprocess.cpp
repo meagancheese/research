@@ -41,6 +41,7 @@ int ped_subtract(struct SW_Data_Packet * data_packet, uint16_t *all_peds) {
     uint8_t bank = data_packet->bank;
     for (int i = 0; i < NUM_SAMPLES; i++) {
         for (int j = 0; j < NUM_CHANNELS; j++) {
+            #pragma HLS PIPELINE II=1
             ped_sub_results[i][j] = data_packet->samples[i][j] - all_peds[bank*NUM_SAMPLES*NUM_CHANNELS + ped_sample_idx*NUM_CHANNELS + j];
             if (j==NUM_CHANNELS-1) {
                 ped_sample_idx += 1;
@@ -66,11 +67,17 @@ int integral(struct SW_Data_Packet * data_packet, int rel_start, int rel_end, in
     if (end >= start) {
         linear = 1;
     }
+    int32_t current_integral = 0;
+    int i_gte_start = 0;
+    int i_lte_end = 0;
     for (int i = 0; i < NUM_SAMPLES; i++) {
         for (int j = 0; j < NUM_CHANNELS; j++) {
-            int32_t current_integral = integrals[integral_num*NUM_CHANNELS+j];
-            integrals[integral_num*NUM_CHANNELS+j] = (i == 0) ? 0 : current_integral;
-            integrals[integral_num*NUM_CHANNELS+j] = ((i >= start) && (i <= end)) || (!linear && ((i >= start) || (i <= end))) ? current_integral + ped_sub_results[i][j] : current_integral;
+            #pragma HLS PIPELINE II=1
+            current_integral = (i>0) ? integrals[integral_num*NUM_CHANNELS+j] : 0;
+            i_gte_start = (i >= start);
+            i_lte_end = (i <= end);
+            integrals[integral_num*NUM_CHANNELS+j] = (i_gte_start && i_lte_end) || (!linear && (i_gte_start || i_lte_end)) ? current_integral + ped_sub_results[i][j] : current_integral;
+            #pragma HLS DEPENDENCE variable=integrals false
         }
     }
     return 0;
