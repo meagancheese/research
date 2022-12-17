@@ -54,11 +54,11 @@ int ped_subtract(struct SW_Data_Packet * data_packet, uint16_t *all_peds) {
 }
 
 int integral(struct SW_Data_Packet * data_packet, int rel_start, int rel_end, int integral_num, int32_t * integrals) {
-    int start = data_packet->trigger_number + rel_start - data_packet->starting_sample_number;
+    int start = data_packet->fine_time + rel_start - data_packet->starting_sample_number;
     if (start < 0) {
         start = start + NUM_SAMPLES - 1;
     }
-    int end = data_packet->trigger_number + rel_end - data_packet->starting_sample_number;
+    int end = data_packet->fine_time + rel_end - data_packet->starting_sample_number;
     if (end >= NUM_SAMPLES - 1) {
         end = end - (NUM_SAMPLES - 1);
     }
@@ -67,7 +67,7 @@ int integral(struct SW_Data_Packet * data_packet, int rel_start, int rel_end, in
         linear = 1;
     }
     for (int i = 0; i < NUM_SAMPLES; i++) {
-        for (j = 0; j < NUM_CHANNELS; j++) {
+        for (int j = 0; j < NUM_CHANNELS; j++) {
             if (i == 0) {
                 integrals[integral_num*NUM_CHANNELS+j] = 0;
             }

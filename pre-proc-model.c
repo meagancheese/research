@@ -208,11 +208,11 @@ int ped_subtract() {
 }
 
 int integral(int rel_start, int rel_end, int integral_num) {
-    int start = data_packet.trigger_number + rel_start - data_packet.starting_sample_number;
+    int start = data_packet.fine_time + rel_start - data_packet.starting_sample_number;
     if (start < 0) {
         start = start + data_packet.samples_to_be_read;
     }
-    int end = data_packet.trigger_number + rel_end - data_packet.starting_sample_number;
+    int end = data_packet.fine_time + rel_end - data_packet.starting_sample_number;
     if (end >= data_packet.samples_to_be_read) {
         end = end - data_packet.samples_to_be_read;
     }
