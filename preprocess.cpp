@@ -67,18 +67,24 @@ int integral(struct SW_Data_Packet * data_packet, int rel_start, int rel_end, in
     if (end >= start) {
         linear = 1;
     }
-    int32_t current_integral = 0;
+    int32_t temp_integrals[4][NUM_CHANNELS];
+    int32_t current_integral;
     int i_gte_start = 0;
     int i_lte_end = 0;
     for (int i = 0; i < NUM_SAMPLES; i++) {
         for (int j = 0; j < NUM_CHANNELS; j++) {
             #pragma HLS PIPELINE II=1
-            current_integral = (i>0) ? integrals[integral_num*NUM_CHANNELS+j] : 0;
+            current_integral = (i>0) ? temp_integrals[integral_num][j] : 0;
             i_gte_start = (i >= start);
             i_lte_end = (i <= end);
-            integrals[integral_num*NUM_CHANNELS+j] = (i_gte_start && i_lte_end) || (!linear && (i_gte_start || i_lte_end)) ? current_integral + ped_sub_results[i][j] : current_integral;
-            #pragma HLS DEPENDENCE variable=integrals false
+            temp_integrals[integral_num][j] = (i_gte_start && i_lte_end) || (!linear && (i_gte_start || i_lte_end)) ? current_integral + ped_sub_results[i][j] : current_integral;
+            #pragma HLS DEPENDENCE variable=temp_integrals false
+            // I think this should be fine, since it's what they do in the example and it's a WAR dependency...
         }
+    }
+    // Need to transfer from the temporary buffer to the output
+    for (int i = 0; i < NUM_CHANNELS; i++) {
+        integrals[integral_num*NUM_CHANNELS+i] = temp_integrals[integral_num][i];
     }
     return 0;
 }
